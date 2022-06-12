@@ -142,33 +142,6 @@ func TestCustomClientDo2Bytes(t *testing.T) {
 	}
 }
 
-func TestIsRetryableError(t *testing.T) {
-	testCases := []struct {
-		name   string
-		err    error
-		result bool
-	}{
-		{
-			name:   "not retryable",
-			err:    nil,
-			result: false,
-		},
-		{
-			name: "retryable",
-			err: &net.DNSError{
-				Err:       "context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
-				IsTimeout: true,
-			},
-			result: true,
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, isRetryableError(tc.err), tc.result)
-		})
-	}
-}
-
 func TestCustomClientDoRetry(t *testing.T) {
 	server := getServer()
 	defer server.Close()
@@ -203,6 +176,109 @@ func TestCustomClientDoRetry(t *testing.T) {
 			}()
 
 			require.Equal(t, res.StatusCode, tc.expectedStatusCode)
+		})
+	}
+}
+
+func TestDo2JSONNoReceiver(t *testing.T) {
+	server := getServer()
+	defer server.Close()
+
+	ctx := context.Background()
+
+	testCases := []struct {
+		name          string
+		url           string
+		method        string
+		expectedError error
+	}{
+		{
+			name:          "receiver not set " + http.MethodGet,
+			url:           fmt.Sprintf("%s/url", server.URL),
+			method:        http.MethodGet,
+			expectedError: ReceiverNotSet,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := http.NewRequestWithContext(ctx, tc.method, tc.url, nil)
+			require.NoError(t, err)
+
+			err = Request(request).Do2JSON(ctx, nil)
+			require.Equal(t, err, tc.expectedError)
+
+			err = Request(request).Do2EasyJSON(ctx, nil)
+			require.Equal(t, err, tc.expectedError)
+		})
+	}
+}
+
+func TestCustomClientDoRetryStatusCode(t *testing.T) {
+	server := getServer()
+	defer server.Close()
+
+	ctx := context.Background()
+
+	prop := func(properties *Properties) {
+		properties.RetryHTTPCodes = []int{500, 400}
+		properties.TryQty = 3
+	}
+	client := New(prop)
+
+	testCases := []testCase{
+		{
+			name:               "success after retry method " + http.MethodGet,
+			url:                fmt.Sprintf("%s/different_response", server.URL),
+			method:             http.MethodGet,
+			expectedStatusCode: http.StatusOK,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := http.NewRequestWithContext(ctx, tc.method, tc.url, nil)
+			require.NoError(t, err)
+
+			res, err := client.Request(request).Do(ctx)
+			require.NoError(t, err)
+			defer func() {
+				if res != nil {
+					_ = res.Body.Close()
+				}
+			}()
+
+			require.Equal(t, res.StatusCode, tc.expectedStatusCode)
+		})
+	}
+}
+
+func TestIsRetryableError(t *testing.T) {
+	testCases := []struct {
+		name   string
+		err    error
+		result bool
+	}{
+		{
+			name:   "no error",
+			err:    nil,
+			result: false,
+		},
+		{
+			name: "retryable net error",
+			err: &net.DNSError{
+				Err:       "context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
+				IsTimeout: true,
+			},
+			result: true,
+		},
+		{
+			name:   "not retryable http error",
+			err:    http.ErrServerClosed,
+			result: false,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, isRetryableError(tc.err), tc.result)
 		})
 	}
 }
@@ -274,7 +350,10 @@ func getTestCases(url string) []testCase {
 }
 
 func getServer() *httptest.Server {
-	var counter time.Duration
+	var (
+		counter  time.Duration
+		switcher int
+	)
 	counter = 2
 	mux := http.NewServeMux()
 	mux.HandleFunc("/url", func(w http.ResponseWriter, r *http.Request) {
@@ -295,6 +374,19 @@ func getServer() *httptest.Server {
 		time.Sleep(time.Millisecond * counter)
 		counter--
 		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/different_response", func(w http.ResponseWriter, r *http.Request) {
+		var httpStatus int
+		switch switcher {
+		case 0:
+			httpStatus = http.StatusInternalServerError
+		case 1:
+			httpStatus = http.StatusBadRequest
+		case 2:
+			httpStatus = http.StatusOK
+		}
+		switcher++
+		w.WriteHeader(httpStatus)
 	})
 	mux.HandleFunc("/400", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)

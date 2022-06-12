@@ -43,6 +43,7 @@ var (
 		MaxJitter: time.Millisecond * 10,
 		Name:      "retry_http",
 	}
+	ReceiverNotSet = errors.New("receiver not set")
 )
 
 type Client struct {
@@ -94,7 +95,7 @@ func New(customize ...func(properties *Properties)) *Client {
 	client := cleanhttp.DefaultPooledClient()
 	client.Timeout = prop.Timeout
 
-	return &Client{client: client, retryOptions: opts}
+	return &Client{client: client, retryOptions: opts, retryHTTPCodes: prop.RetryHTTPCodes}
 }
 
 func Request(request *http.Request) *Builder { return Default().Request(request) }
@@ -108,30 +109,30 @@ type Builder struct {
 	request *http.Request
 }
 
-// Do2EasyJSON - выполняет http метод и сохраняет ответ в easy json структуру, на которую передан указатель
+// Do2EasyJSON - execute http method and save response into easyjson receiver struct
 func (h *Builder) Do2EasyJSON(ctx context.Context, receiver easyjson.Unmarshaler) error {
 	bytes, err := h.Do2Bytes(ctx)
 	if err != nil {
 		return err
 	}
 	if receiver == nil {
-		return nil
+		return ReceiverNotSet
 	}
 	err = easyjson.Unmarshal(bytes, receiver)
 	if err != nil {
-		return errors.Wrap(err, "easyjson.UnmarshalFromReader")
+		return errors.Wrap(err, "easyjson.Unmarshal")
 	}
 	return nil
 }
 
-// Do2JSON - выполняет http метод и сохраняет json ответ в структуру, на которую передан указатель
+// Do2JSON - execute http method and save json response into receiver struct
 func (h *Builder) Do2JSON(ctx context.Context, receiver interface{}) error {
 	bytes, err := h.Do2Bytes(ctx)
 	if err != nil {
 		return err
 	}
 	if receiver == nil {
-		return nil
+		return ReceiverNotSet
 	}
 	err = json.Unmarshal(bytes, receiver)
 	if err != nil {
@@ -140,7 +141,7 @@ func (h *Builder) Do2JSON(ctx context.Context, receiver interface{}) error {
 	return nil
 }
 
-// Do2Bytes - выполняет http метод и выдает результат в []byte
+// Do2Bytes - execute http method and return result into []byte
 func (h *Builder) Do2Bytes(ctx context.Context) ([]byte, error) {
 	response, err := h.client.doWithRetries(ctx, h.request)
 	defer func() {
@@ -153,12 +154,12 @@ func (h *Builder) Do2Bytes(ctx context.Context) ([]byte, error) {
 	}
 	result, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "ioutil.ReadAll")
 	}
 	return result, nil
 }
 
-// Do - выполняет http метод и выдает результат в *http.Response
+// Do - execute http method and return result into *http.Response
 func (h *Builder) Do(ctx context.Context) (*http.Response, error) {
 	return h.client.doWithRetries(ctx, h.request)
 }
@@ -177,7 +178,7 @@ func (c *Client) doWithRetries(ctx context.Context, request *http.Request) (resp
 		if resp != nil {
 			for _, httpCode := range c.retryHTTPCodes {
 				if resp.StatusCode == httpCode {
-					return errors.Errorf("get code %d", resp.StatusCode)
+					return errors.Errorf("got code %d", resp.StatusCode)
 				}
 			}
 		}
