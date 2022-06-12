@@ -1,18 +1,13 @@
-#Http
+#retryhttp
 
-Пакет позволяет работать с http без создания и конфигурирования кастомных клиентов в удобном виде с сохранением ответа в модели
-
-###Пример
+###Example
 ```go
 
 var response struct{
-		Ip string
-	}
-err :=	Get("http://ip.jsontest.com").
-		Param("format_id",1).
-		Param("anyparam","string value").
-	 Do2Json(context.Background(), &response)
-
+	Ip string
+}
+request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://ip.jsontest.com", nil)
+err = Request(request).Do2JSON(ctx, &response)
 if err != nil {
     panic(err)
 }
