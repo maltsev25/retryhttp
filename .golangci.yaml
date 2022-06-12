@@ -1,0 +1,62 @@
+---
+run:
+  concurrency: 4
+  deadline: 2m
+  issues-exit-code: 1
+  tests: false
+
+linters:
+  disable-all: true
+  enable:
+    - asciicheck
+    - bodyclose
+    - cyclop
+    - deadcode
+    - depguard
+    - dogsled
+    - durationcheck
+    - errcheck
+    - exportloopref
+    - forcetypeassert
+    - gci
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - gofmt
+    - gofumpt
+    - goheader
+    - goimports
+    - gomoddirectives
+    - gomodguard
+    - gosec
+    - gosimple
+    - govet
+    - importas
+    - ineffassign
+    - lll
+    - misspell
+    - nakedret
+    - nestif
+    - nilerr
+    - noctx
+    - paralleltest
+    - prealloc
+    - predeclared
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - structcheck
+    - stylecheck
+    - unconvert
+    - unparam
+    - varcheck
+    - wastedassign
+    - whitespace
+
+
+linters-settings:
+  nestif:
+    min-complexity: 6
+  status-check:
+    checks: [ "all" ]
