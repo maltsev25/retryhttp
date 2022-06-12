@@ -1,8 +1,9 @@
-#retryhttp
+retryhttp
+================
 
-###Example
+example
+================
 ```go
-
 var response struct{
 	Ip string
 }
