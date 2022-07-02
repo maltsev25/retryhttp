@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestGetDefaultConfig tests the default config
 func TestGetDefaultConfig(t *testing.T) {
 	assert.Equal(t, GetDefaultConfig(), Config{
 		TryQty:    3,
@@ -27,6 +28,7 @@ func TestGetDefaultConfig(t *testing.T) {
 		Name:      "retry_http"})
 }
 
+// TestSetDefaultConfig tests that the default config is set correctly
 func TestSetDefaultConfig(t *testing.T) {
 	config := Config{
 		TryQty:    2,
@@ -53,6 +55,7 @@ type testCase struct {
 	expectedResponse     testData
 }
 
+// TestDo tests the Do method
 func TestDo(t *testing.T) {
 	server := getServer()
 	defer server.Close()
@@ -65,7 +68,7 @@ func TestDo(t *testing.T) {
 			request, err := http.NewRequestWithContext(ctx, tc.method, tc.url, nil)
 			require.NoError(t, err)
 
-			res, err := Request(request).Do(ctx)
+			res, err := Do(request)
 			require.NoError(t, err)
 			defer func() {
 				if res != nil {
@@ -78,6 +81,7 @@ func TestDo(t *testing.T) {
 	}
 }
 
+// TestDo2Bytes tests the Do2Bytes method
 func TestDo2Bytes(t *testing.T) {
 	server := getServer()
 	defer server.Close()
@@ -90,13 +94,14 @@ func TestDo2Bytes(t *testing.T) {
 			request, err := http.NewRequestWithContext(ctx, tc.method, tc.url, nil)
 			require.NoError(t, err)
 
-			res, err := Request(request).Do2Bytes(ctx)
+			res, err := Do2Bytes(request)
 			require.NoError(t, err)
 			require.Equal(t, res, tc.expectedByteResponse)
 		})
 	}
 }
 
+// TestDo2JSON tests the Do2JSON method
 func TestDo2JSON(t *testing.T) {
 	server := getServer()
 	defer server.Close()
@@ -110,12 +115,13 @@ func TestDo2JSON(t *testing.T) {
 			request, err := http.NewRequestWithContext(ctx, tc.method, tc.url, nil)
 			require.NoError(t, err)
 
-			err = Request(request).Do2JSON(ctx, &d)
+			err = Do2JSON(request, &d)
 			require.Equal(t, d, tc.expectedResponse)
 		})
 	}
 }
 
+// TestCustomClientDo2Bytes tests the Do2Bytes method with custom client
 func TestCustomClientDo2Bytes(t *testing.T) {
 	server := getServer()
 	defer server.Close()
@@ -135,13 +141,14 @@ func TestCustomClientDo2Bytes(t *testing.T) {
 			request, err := http.NewRequestWithContext(ctx, tc.method, tc.url, nil)
 			require.NoError(t, err)
 
-			res, err := client.Request(request).Do2Bytes(ctx)
+			res, err := client.Do2Bytes(request)
 			require.NoError(t, err)
 			require.Equal(t, res, tc.expectedByteResponse)
 		})
 	}
 }
 
+// TestCustomClientDoRetry tests the DoRetry method with custom client
 func TestCustomClientDoRetry(t *testing.T) {
 	server := getServer()
 	defer server.Close()
@@ -167,7 +174,7 @@ func TestCustomClientDoRetry(t *testing.T) {
 			request, err := http.NewRequestWithContext(ctx, tc.method, tc.url, nil)
 			require.NoError(t, err)
 
-			res, err := client.Request(request).Do(ctx)
+			res, err := client.Do(request)
 			require.NoError(t, err)
 			defer func() {
 				if res != nil {
@@ -180,6 +187,7 @@ func TestCustomClientDoRetry(t *testing.T) {
 	}
 }
 
+// TestDo2JSONNoReceiver tests the Do2JSON method with no receiver
 func TestDo2JSONNoReceiver(t *testing.T) {
 	server := getServer()
 	defer server.Close()
@@ -196,7 +204,7 @@ func TestDo2JSONNoReceiver(t *testing.T) {
 			name:          "receiver not set " + http.MethodGet,
 			url:           fmt.Sprintf("%s/url", server.URL),
 			method:        http.MethodGet,
-			expectedError: ReceiverNotSet,
+			expectedError: ErrReceiverNotSet,
 		},
 	}
 	for _, tc := range testCases {
@@ -204,15 +212,16 @@ func TestDo2JSONNoReceiver(t *testing.T) {
 			request, err := http.NewRequestWithContext(ctx, tc.method, tc.url, nil)
 			require.NoError(t, err)
 
-			err = Request(request).Do2JSON(ctx, nil)
+			err = Do2JSON(request, nil)
 			require.Equal(t, err, tc.expectedError)
 
-			err = Request(request).Do2EasyJSON(ctx, nil)
+			err = Do2EasyJSON(request, nil)
 			require.Equal(t, err, tc.expectedError)
 		})
 	}
 }
 
+// TestCustomClientDoRetryStatusCode tests the DoRetry method with custom client and status code
 func TestCustomClientDoRetryStatusCode(t *testing.T) {
 	server := getServer()
 	defer server.Close()
@@ -238,7 +247,7 @@ func TestCustomClientDoRetryStatusCode(t *testing.T) {
 			request, err := http.NewRequestWithContext(ctx, tc.method, tc.url, nil)
 			require.NoError(t, err)
 
-			res, err := client.Request(request).Do(ctx)
+			res, err := client.Do(request)
 			require.NoError(t, err)
 			defer func() {
 				if res != nil {
@@ -251,6 +260,7 @@ func TestCustomClientDoRetryStatusCode(t *testing.T) {
 	}
 }
 
+// TestIsRetryableError tests the IsRetryableError method
 func TestIsRetryableError(t *testing.T) {
 	testCases := []struct {
 		name   string

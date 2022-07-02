@@ -1,7 +1,6 @@
 package retryhttp
 
 import (
-	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net"
@@ -43,7 +42,7 @@ var (
 		MaxJitter: time.Millisecond * 10,
 		Name:      "retry_http",
 	}
-	ReceiverNotSet = errors.New("receiver not set")
+	ErrReceiverNotSet = errors.New("receiver not set")
 )
 
 type Client struct {
@@ -74,6 +73,26 @@ func Default() *Client {
 	return defaultClient
 }
 
+// Do execute http method and return result into *http.Response
+func Do(request *http.Request) (*http.Response, error) {
+	return Default().Do(request)
+}
+
+// Do2Bytes execute http method and return result into []byte
+func Do2Bytes(request *http.Request) ([]byte, error) {
+	return Default().Do2Bytes(request)
+}
+
+// Do2JSON execute http method and save json response into receiver struct
+func Do2JSON(request *http.Request, receiver interface{}) error {
+	return Default().Do2JSON(request, receiver)
+}
+
+// Do2EasyJSON execute http method and save response into easyjson receiver struct
+func Do2EasyJSON(request *http.Request, receiver easyjson.Unmarshaler) error {
+	return Default().Do2EasyJSON(request, receiver)
+}
+
 func New(customize ...func(properties *Properties)) *Client {
 	prop := &Properties{
 		Config:    defaultConfig,
@@ -98,52 +117,14 @@ func New(customize ...func(properties *Properties)) *Client {
 	return &Client{client: client, retryOptions: opts, retryHTTPCodes: prop.RetryHTTPCodes}
 }
 
-func Request(request *http.Request) *Builder { return Default().Request(request) }
-
-func (c *Client) Request(request *http.Request) *Builder {
-	return &Builder{client: c, request: request}
+// Do execute http method and return result into *http.Response
+func (c *Client) Do(request *http.Request) (*http.Response, error) {
+	return c.doWithRetries(request)
 }
 
-type Builder struct {
-	client  *Client
-	request *http.Request
-}
-
-// Do2EasyJSON - execute http method and save response into easyjson receiver struct
-func (h *Builder) Do2EasyJSON(ctx context.Context, receiver easyjson.Unmarshaler) error {
-	bytes, err := h.Do2Bytes(ctx)
-	if err != nil {
-		return err
-	}
-	if receiver == nil {
-		return ReceiverNotSet
-	}
-	err = easyjson.Unmarshal(bytes, receiver)
-	if err != nil {
-		return errors.Wrap(err, "easyjson.Unmarshal")
-	}
-	return nil
-}
-
-// Do2JSON - execute http method and save json response into receiver struct
-func (h *Builder) Do2JSON(ctx context.Context, receiver interface{}) error {
-	bytes, err := h.Do2Bytes(ctx)
-	if err != nil {
-		return err
-	}
-	if receiver == nil {
-		return ReceiverNotSet
-	}
-	err = json.Unmarshal(bytes, receiver)
-	if err != nil {
-		return errors.Wrap(err, "json.Unmarshal")
-	}
-	return nil
-}
-
-// Do2Bytes - execute http method and return result into []byte
-func (h *Builder) Do2Bytes(ctx context.Context) ([]byte, error) {
-	response, err := h.client.doWithRetries(ctx, h.request)
+// Do2Bytes execute http method and return result into []byte
+func (c *Client) Do2Bytes(request *http.Request) ([]byte, error) {
+	response, err := c.doWithRetries(request)
 	defer func() {
 		if response != nil {
 			_ = response.Body.Close()
@@ -159,12 +140,39 @@ func (h *Builder) Do2Bytes(ctx context.Context) ([]byte, error) {
 	return result, nil
 }
 
-// Do - execute http method and return result into *http.Response
-func (h *Builder) Do(ctx context.Context) (*http.Response, error) {
-	return h.client.doWithRetries(ctx, h.request)
+// Do2JSON execute http method and save json response into receiver struct
+func (c *Client) Do2JSON(request *http.Request, receiver interface{}) error {
+	bytes, err := c.Do2Bytes(request)
+	if err != nil {
+		return err
+	}
+	if receiver == nil {
+		return ErrReceiverNotSet
+	}
+	err = json.Unmarshal(bytes, receiver)
+	if err != nil {
+		return errors.Wrap(err, "json.Unmarshal")
+	}
+	return nil
 }
 
-func (c *Client) doWithRetries(ctx context.Context, request *http.Request) (resp *http.Response, err error) {
+// Do2EasyJSON execute http method and save response into easyjson receiver struct
+func (c *Client) Do2EasyJSON(request *http.Request, receiver easyjson.Unmarshaler) error {
+	bytes, err := c.Do2Bytes(request)
+	if err != nil {
+		return err
+	}
+	if receiver == nil {
+		return ErrReceiverNotSet
+	}
+	err = easyjson.Unmarshal(bytes, receiver)
+	if err != nil {
+		return errors.Wrap(err, "easyjson.Unmarshal")
+	}
+	return nil
+}
+
+func (c *Client) doWithRetries(request *http.Request) (resp *http.Response, err error) {
 	action := func() error {
 		//nolint:bodyclose
 		resp, err = c.client.Do(request)
@@ -187,7 +195,7 @@ func (c *Client) doWithRetries(ctx context.Context, request *http.Request) (resp
 	}
 
 	opts := make([]retry.Option, 0, len(c.retryOptions)+1)
-	opts = append(opts, retry.Context(ctx))
+	opts = append(opts, retry.Context(request.Context()))
 	opts = append(opts, c.retryOptions...)
 
 	err = retry.Do(action, opts...)
