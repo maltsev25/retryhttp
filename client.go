@@ -2,9 +2,12 @@ package retryhttp
 
 import (
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,7 +18,7 @@ import (
 )
 
 type Config struct {
-	TryQty    uint
+	RetryQty  uint
 	WaitRetry time.Duration
 	Timeout   time.Duration
 	Delay     time.Duration
@@ -35,7 +38,7 @@ var (
 	mu            sync.Mutex
 	defaultOnce   sync.Once
 	defaultConfig = Config{
-		TryQty:    3,
+		RetryQty:  2,
 		WaitRetry: time.Second * 2,
 		Timeout:   time.Second,
 		Delay:     time.Millisecond * 100,
@@ -73,6 +76,26 @@ func Default() *Client {
 	return defaultClient
 }
 
+// Get execute http method and return result into *http.Response
+func Get(url string) (*http.Response, error) {
+	return Default().Get(url)
+}
+
+// Post execute http method and return result into *http.Response
+func Post(url, contentType string, body io.Reader) (resp *http.Response, err error) {
+	return Default().Post(url, contentType, body)
+}
+
+// PostForm execute http method and return result into *http.Response
+func PostForm(url string, data url.Values) (resp *http.Response, err error) {
+	return Default().PostForm(url, data)
+}
+
+// Head execute http method and return result into *http.Response
+func Head(url string) (resp *http.Response, err error) {
+	return Default().Head(url)
+}
+
 // Do execute http method and return result into *http.Response
 func Do(request *http.Request) (*http.Response, error) {
 	return Default().Do(request)
@@ -104,7 +127,7 @@ func New(customize ...func(properties *Properties)) *Client {
 	}
 	opts := []retry.Option{
 		retry.MaxDelay(prop.WaitRetry),
-		retry.Attempts(prop.TryQty),
+		retry.Attempts(prop.RetryQty + 1),
 		retry.OnRetry(prop.OnRetry),
 		retry.Delay(prop.Delay),
 		retry.MaxJitter(prop.MaxJitter),
@@ -115,6 +138,39 @@ func New(customize ...func(properties *Properties)) *Client {
 	client.Timeout = prop.Timeout
 
 	return &Client{client: client, retryOptions: opts, retryHTTPCodes: prop.RetryHTTPCodes}
+}
+
+// Get execute http method and return result into *http.Response
+func (c *Client) Get(url string) (resp *http.Response, err error) {
+	request, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return c.doWithRetries(request)
+}
+
+// Post execute http method and return result into *http.Response
+func (c *Client) Post(url, contentType string, body io.Reader) (resp *http.Response, err error) {
+	request, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Content-Type", contentType)
+	return c.doWithRetries(request)
+}
+
+// PostForm execute http method and return result into *http.Response
+func (c *Client) PostForm(url string, data url.Values) (resp *http.Response, err error) {
+	return c.Post(url, "application/x-www-form-urlencoded", strings.NewReader(data.Encode()))
+}
+
+// Head execute http method and return result into *http.Response
+func (c *Client) Head(url string) (resp *http.Response, err error) {
+	request, err := http.NewRequest("HEAD", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return c.doWithRetries(request)
 }
 
 // Do execute http method and return result into *http.Response

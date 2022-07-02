@@ -20,7 +20,7 @@ import (
 // TestGetDefaultConfig tests the default config
 func TestGetDefaultConfig(t *testing.T) {
 	assert.Equal(t, GetDefaultConfig(), Config{
-		TryQty:    3,
+		RetryQty:  2,
 		WaitRetry: 2 * time.Second,
 		Timeout:   1 * time.Second,
 		Delay:     100 * time.Millisecond,
@@ -31,7 +31,7 @@ func TestGetDefaultConfig(t *testing.T) {
 // TestSetDefaultConfig tests that the default config is set correctly
 func TestSetDefaultConfig(t *testing.T) {
 	config := Config{
-		TryQty:    2,
+		RetryQty:  0,
 		WaitRetry: 2 * time.Second,
 		Timeout:   3 * time.Second,
 		Delay:     100 * time.Millisecond,
@@ -130,7 +130,7 @@ func TestCustomClientDo2Bytes(t *testing.T) {
 
 	prop := func(properties *Properties) {
 		properties.Name = "custom_retry_http"
-		properties.TryQty = 1
+		properties.RetryQty = 1
 		properties.Timeout = time.Millisecond * 2
 	}
 	client := New(prop)
@@ -156,7 +156,7 @@ func TestCustomClientDoRetry(t *testing.T) {
 	ctx := context.Background()
 
 	prop := func(properties *Properties) {
-		properties.TryQty = 3
+		properties.RetryQty = 3
 		properties.Timeout = time.Millisecond * 2
 	}
 	client := New(prop)
@@ -230,7 +230,7 @@ func TestCustomClientDoRetryStatusCode(t *testing.T) {
 
 	prop := func(properties *Properties) {
 		properties.RetryHTTPCodes = []int{500, 400}
-		properties.TryQty = 3
+		properties.RetryQty = 3
 	}
 	client := New(prop)
 
