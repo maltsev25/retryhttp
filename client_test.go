@@ -55,6 +55,99 @@ type testCase struct {
 	expectedResponse     testData
 }
 
+// TestGet tests the Get method
+func TestGet(t *testing.T) {
+	server := getServer()
+	defer server.Close()
+
+	testCases := getTestCases(server.URL)
+	for _, tc := range testCases {
+		if tc.method != http.MethodGet {
+			continue
+		}
+
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := Get(tc.url)
+			require.NoError(t, err)
+			defer func() {
+				if res != nil {
+					_ = res.Body.Close()
+				}
+			}()
+
+			require.Equal(t, res.StatusCode, tc.expectedStatusCode)
+		})
+	}
+}
+
+// TestPost tests the Post method
+func TestPost(t *testing.T) {
+	server := getServer()
+	defer server.Close()
+	testCases := getTestCases(server.URL)
+	for _, tc := range testCases {
+		if tc.method != http.MethodPost {
+			continue
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := Post(tc.url, "application/json", nil)
+			require.NoError(t, err)
+			defer func() {
+				if res != nil {
+					_ = res.Body.Close()
+				}
+			}()
+
+			require.Equal(t, res.StatusCode, tc.expectedStatusCode)
+		})
+	}
+}
+
+// TestPostForm tests the PostForm method
+func TestPostForm(t *testing.T) {
+	server := getServer()
+	defer server.Close()
+
+	testCases := getTestCases(server.URL)
+	for _, tc := range testCases {
+		if tc.method != http.MethodPost {
+			continue
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := PostForm(tc.url, nil)
+			require.NoError(t, err)
+			defer func() {
+				if res != nil {
+					_ = res.Body.Close()
+				}
+			}()
+
+			require.Equal(t, res.StatusCode, tc.expectedStatusCode)
+		})
+	}
+}
+
+// TestHead tests the Head method
+func TestHead(t *testing.T) {
+	server := getServer()
+	defer server.Close()
+
+	testCases := getTestCases(server.URL)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := Head(tc.url)
+			require.NoError(t, err)
+			defer func() {
+				if res != nil {
+					_ = res.Body.Close()
+				}
+			}()
+
+			require.Equal(t, res.StatusCode, tc.expectedStatusCode)
+		})
+	}
+}
+
 // TestDo tests the Do method
 func TestDo(t *testing.T) {
 	server := getServer()
@@ -260,6 +353,31 @@ func TestCustomClientDoRetryStatusCode(t *testing.T) {
 	}
 }
 
+// TestUnrecoverableError tests the UnrecoverableError
+func TestUnrecoverableError(t *testing.T) {
+	server := getServer()
+	defer server.Close()
+
+	ctx := context.Background()
+
+	testCases := []testCase{
+		{
+			name:   "unrecoverable error " + http.MethodGet,
+			url:    "not a valid url",
+			method: http.MethodGet,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := http.NewRequestWithContext(ctx, tc.method, tc.url, nil)
+			require.NoError(t, err)
+
+			_, err = Do(request)
+			require.Error(t, err)
+		})
+	}
+}
+
 // TestIsRetryableError tests the IsRetryableError method
 func TestIsRetryableError(t *testing.T) {
 	testCases := []struct {
@@ -348,9 +466,25 @@ func getTestCases(url string) []testCase {
 			expectedResponse:     data,
 		},
 		{
+			name:                 "400 method " + http.MethodPost,
+			url:                  fmt.Sprintf("%s/400", url),
+			method:               http.MethodPost,
+			expectedStatusCode:   http.StatusBadRequest,
+			expectedByteResponse: []byte{},
+			expectedResponse:     data,
+		},
+		{
 			name:                 "500 method " + http.MethodGet,
 			url:                  fmt.Sprintf("%s/500", url),
 			method:               http.MethodGet,
+			expectedStatusCode:   http.StatusInternalServerError,
+			expectedByteResponse: []byte{},
+			expectedResponse:     data,
+		},
+		{
+			name:                 "500 method " + http.MethodPost,
+			url:                  fmt.Sprintf("%s/500", url),
+			method:               http.MethodPost,
 			expectedStatusCode:   http.StatusInternalServerError,
 			expectedByteResponse: []byte{},
 			expectedResponse:     data,

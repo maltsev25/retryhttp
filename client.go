@@ -265,7 +265,8 @@ func isRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if _, ok := err.(net.Error); ok {
+	errNet, ok := err.(net.Error)
+	if ok && errNet.Timeout() {
 		return true
 	}
 	return false
