@@ -30,8 +30,13 @@ type Properties struct {
 	Config
 	OnRetry        retry.OnRetryFunc
 	DelayType      retry.DelayTypeFunc
+	RetryLogicFunc RetryLogicFunc
 	RetryHTTPCodes []int
 }
+
+// RetryLogicFunc is a function that returns error if request should be retried
+// disabling check for RetryHTTPCodes
+type RetryLogicFunc func(resp *http.Response) error
 
 var (
 	defaultClient *Client
@@ -51,7 +56,7 @@ var (
 type Client struct {
 	client         *http.Client
 	retryOptions   []retry.Option
-	retryHTTPCodes []int
+	retryLogicFunc RetryLogicFunc
 }
 
 func SetDefaultConfig(config Config) {
@@ -125,6 +130,17 @@ func New(customize ...func(properties *Properties)) *Client {
 	for _, c := range customize {
 		c(prop)
 	}
+	if prop.RetryLogicFunc == nil {
+		prop.RetryLogicFunc = func(resp *http.Response) error {
+			for _, httpCode := range prop.RetryHTTPCodes {
+				if resp.StatusCode == httpCode {
+					return errors.Errorf("got code %d", resp.StatusCode)
+				}
+			}
+			return nil
+		}
+	}
+
 	opts := []retry.Option{
 		retry.MaxDelay(prop.WaitRetry),
 		retry.Attempts(prop.RetryQty + 1),
@@ -137,7 +153,7 @@ func New(customize ...func(properties *Properties)) *Client {
 	client := cleanhttp.DefaultPooledClient()
 	client.Timeout = prop.Timeout
 
-	return &Client{client: client, retryOptions: opts, retryHTTPCodes: prop.RetryHTTPCodes}
+	return &Client{client: client, retryOptions: opts, retryLogicFunc: prop.RetryLogicFunc}
 }
 
 // Get execute http method and return result into *http.Response
@@ -240,11 +256,7 @@ func (c *Client) doWithRetries(request *http.Request) (resp *http.Response, err 
 		}
 
 		if resp != nil {
-			for _, httpCode := range c.retryHTTPCodes {
-				if resp.StatusCode == httpCode {
-					return errors.Errorf("got code %d", resp.StatusCode)
-				}
-			}
+			return c.retryLogicFunc(resp)
 		}
 
 		return nil

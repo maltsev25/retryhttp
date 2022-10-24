@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -314,7 +315,7 @@ func TestDo2JSONNoReceiver(t *testing.T) {
 	}
 }
 
-// TestCustomClientDoRetryStatusCode tests the DoRetry method with custom client and status code
+// TestCustomClientDoRetryStatusCode tests the DoRetry method with custom client and StatusCode
 func TestCustomClientDoRetryStatusCode(t *testing.T) {
 	server := getServer()
 	defer server.Close()
@@ -333,6 +334,50 @@ func TestCustomClientDoRetryStatusCode(t *testing.T) {
 			url:                fmt.Sprintf("%s/different_response", server.URL),
 			method:             http.MethodGet,
 			expectedStatusCode: http.StatusOK,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := http.NewRequestWithContext(ctx, tc.method, tc.url, nil)
+			require.NoError(t, err)
+
+			res, err := client.Do(request)
+			require.NoError(t, err)
+			defer func() {
+				if res != nil {
+					_ = res.Body.Close()
+				}
+			}()
+
+			require.Equal(t, res.StatusCode, tc.expectedStatusCode)
+		})
+	}
+}
+
+// TestCustomClientDoRetryLogicFunc tests the DoRetry method with custom client and RetryLogicFunc
+func TestCustomClientDoRetryLogicFunc(t *testing.T) {
+	server := getServer()
+	defer server.Close()
+
+	ctx := context.Background()
+
+	prop := func(properties *Properties) {
+		properties.RetryLogicFunc = func(r *http.Response) error {
+			if r.StatusCode == http.StatusInternalServerError {
+				return errors.New("error")
+			}
+			return nil
+		}
+		properties.RetryQty = 3
+	}
+	client := New(prop)
+
+	testCases := []testCase{
+		{
+			name:               "success after retry method " + http.MethodGet,
+			url:                fmt.Sprintf("%s/different_response", server.URL),
+			method:             http.MethodGet,
+			expectedStatusCode: http.StatusBadRequest,
 		},
 	}
 	for _, tc := range testCases {
