@@ -18,12 +18,12 @@ import (
 )
 
 type Config struct {
-	RetryQty  uint
-	WaitRetry time.Duration
+	// Attempts must be greater than 0, otherwise it will be set to 1
+	Attempts  uint
+	MaxDelay  time.Duration
 	Timeout   time.Duration
 	Delay     time.Duration
 	MaxJitter time.Duration
-	Name      string
 }
 
 type Properties struct {
@@ -43,12 +43,11 @@ var (
 	mu            sync.Mutex
 	defaultOnce   sync.Once
 	defaultConfig = Config{
-		RetryQty:  2,
-		WaitRetry: time.Second * 2,
+		Attempts:  3,
+		MaxDelay:  time.Second * 2,
 		Timeout:   time.Second,
 		Delay:     time.Millisecond * 100,
 		MaxJitter: time.Millisecond * 10,
-		Name:      "retry_http",
 	}
 	ErrReceiverNotSet = errors.New("receiver not set")
 )
@@ -140,10 +139,13 @@ func New(customize ...func(properties *Properties)) *Client {
 			return nil
 		}
 	}
+	if prop.Attempts < 1 {
+		prop.Attempts = 1
+	}
 
 	opts := []retry.Option{
-		retry.MaxDelay(prop.WaitRetry),
-		retry.Attempts(prop.RetryQty + 1),
+		retry.MaxDelay(prop.MaxDelay),
+		retry.Attempts(prop.Attempts),
 		retry.OnRetry(prop.OnRetry),
 		retry.Delay(prop.Delay),
 		retry.MaxJitter(prop.MaxJitter),
