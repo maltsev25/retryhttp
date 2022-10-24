@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,23 +21,23 @@ import (
 // TestGetDefaultConfig tests the default config
 func TestGetDefaultConfig(t *testing.T) {
 	assert.Equal(t, GetDefaultConfig(), Config{
-		RetryQty:  2,
-		WaitRetry: 2 * time.Second,
+		Attempts:  3,
+		MaxDelay:  2 * time.Second,
 		Timeout:   1 * time.Second,
 		Delay:     100 * time.Millisecond,
 		MaxJitter: 10 * time.Millisecond,
-		Name:      "retry_http"})
+	})
 }
 
 // TestSetDefaultConfig tests that the default config is set correctly
 func TestSetDefaultConfig(t *testing.T) {
 	config := Config{
-		RetryQty:  0,
-		WaitRetry: 2 * time.Second,
+		Attempts:  1,
+		MaxDelay:  2 * time.Second,
 		Timeout:   3 * time.Second,
 		Delay:     100 * time.Millisecond,
 		MaxJitter: 10 * time.Millisecond,
-		Name:      "retry_http"}
+	}
 	SetDefaultConfig(config)
 	assert.Equal(t, GetDefaultConfig(), config)
 }
@@ -222,8 +223,7 @@ func TestCustomClientDo2Bytes(t *testing.T) {
 	ctx := context.Background()
 
 	prop := func(properties *Properties) {
-		properties.Name = "custom_retry_http"
-		properties.RetryQty = 1
+		properties.Attempts = 1
 		properties.Timeout = time.Millisecond * 2
 	}
 	client := New(prop)
@@ -249,7 +249,7 @@ func TestCustomClientDoRetry(t *testing.T) {
 	ctx := context.Background()
 
 	prop := func(properties *Properties) {
-		properties.RetryQty = 3
+		properties.Attempts = 3
 		properties.Timeout = time.Millisecond * 2
 	}
 	client := New(prop)
@@ -314,7 +314,7 @@ func TestDo2JSONNoReceiver(t *testing.T) {
 	}
 }
 
-// TestCustomClientDoRetryStatusCode tests the DoRetry method with custom client and status code
+// TestCustomClientDoRetryStatusCode tests the DoRetry method with custom client and StatusCode
 func TestCustomClientDoRetryStatusCode(t *testing.T) {
 	server := getServer()
 	defer server.Close()
@@ -323,7 +323,7 @@ func TestCustomClientDoRetryStatusCode(t *testing.T) {
 
 	prop := func(properties *Properties) {
 		properties.RetryHTTPCodes = []int{500, 400}
-		properties.RetryQty = 3
+		properties.Attempts = 3
 	}
 	client := New(prop)
 
@@ -333,6 +333,50 @@ func TestCustomClientDoRetryStatusCode(t *testing.T) {
 			url:                fmt.Sprintf("%s/different_response", server.URL),
 			method:             http.MethodGet,
 			expectedStatusCode: http.StatusOK,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := http.NewRequestWithContext(ctx, tc.method, tc.url, nil)
+			require.NoError(t, err)
+
+			res, err := client.Do(request)
+			require.NoError(t, err)
+			defer func() {
+				if res != nil {
+					_ = res.Body.Close()
+				}
+			}()
+
+			require.Equal(t, res.StatusCode, tc.expectedStatusCode)
+		})
+	}
+}
+
+// TestCustomClientDoRetryLogicFunc tests the DoRetry method with custom client and RetryLogicFunc
+func TestCustomClientDoRetryLogicFunc(t *testing.T) {
+	server := getServer()
+	defer server.Close()
+
+	ctx := context.Background()
+
+	prop := func(properties *Properties) {
+		properties.RetryLogicFunc = func(r *http.Response) error {
+			if r.StatusCode == http.StatusInternalServerError {
+				return errors.New("error")
+			}
+			return nil
+		}
+		properties.Attempts = 3
+	}
+	client := New(prop)
+
+	testCases := []testCase{
+		{
+			name:               "success after retry method " + http.MethodGet,
+			url:                fmt.Sprintf("%s/different_response", server.URL),
+			method:             http.MethodGet,
+			expectedStatusCode: http.StatusBadRequest,
 		},
 	}
 	for _, tc := range testCases {
