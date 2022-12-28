@@ -4,8 +4,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-
-	"github.com/mailru/easyjson"
 )
 
 type ClientHTTP interface {
@@ -16,5 +14,4 @@ type ClientHTTP interface {
 	Do(request *http.Request) (*http.Response, error)
 	Do2Bytes(request *http.Request) ([]byte, error)
 	Do2JSON(request *http.Request, receiver interface{}) error
-	Do2EasyJSON(request *http.Request, receiver easyjson.Unmarshaler) error
 }
