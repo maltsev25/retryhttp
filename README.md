@@ -43,6 +43,8 @@ Override JSON Unmarshal
 ===========
 User can register choice of JSON library into `retryhttp` or write own. By default `retryhttp` registers standard `encoding/json` respectively.
 ```go
+import "github.com/goccy/go-json"
+
 prop := func(properties *Properties) {
     properties.JSONUnmarshal = json.Unmarshal
 }
