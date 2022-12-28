@@ -1,7 +1,6 @@
 package retryhttp
 
 import (
-	"encoding/json"
 	"io"
 	"io/ioutil"
 	"net"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/avast/retry-go"
+	"github.com/goccy/go-json"
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/mailru/easyjson"
 	"github.com/pkg/errors"
