@@ -1,6 +1,7 @@
 package retryhttp
 
 import (
+	"encoding/json"
 	"io"
 	"io/ioutil"
 	"net"
@@ -11,9 +12,7 @@ import (
 	"time"
 
 	"github.com/avast/retry-go"
-	"github.com/goccy/go-json"
 	"github.com/hashicorp/go-cleanhttp"
-	"github.com/mailru/easyjson"
 	"github.com/pkg/errors"
 )
 
@@ -32,6 +31,7 @@ type Properties struct {
 	DelayType      retry.DelayTypeFunc
 	RetryLogicFunc RetryLogicFunc
 	RetryHTTPCodes []int
+	JSONUnmarshal  func(data []byte, v interface{}) error
 }
 
 // RetryLogicFunc is a function that returns error if request should be retried
@@ -56,6 +56,7 @@ type Client struct {
 	client         *http.Client
 	retryOptions   []retry.Option
 	retryLogicFunc RetryLogicFunc
+	jsonUnmarshal  func(data []byte, v interface{}) error
 }
 
 func SetDefaultConfig(config Config) {
@@ -115,16 +116,12 @@ func Do2JSON(request *http.Request, receiver interface{}) error {
 	return Default().Do2JSON(request, receiver)
 }
 
-// Do2EasyJSON execute http method and save response into easyjson receiver struct
-func Do2EasyJSON(request *http.Request, receiver easyjson.Unmarshaler) error {
-	return Default().Do2EasyJSON(request, receiver)
-}
-
 func New(customize ...func(properties *Properties)) *Client {
 	prop := &Properties{
-		Config:    defaultConfig,
-		DelayType: retry.DefaultDelayType,
-		OnRetry:   func(n uint, err error) {},
+		Config:        defaultConfig,
+		DelayType:     retry.DefaultDelayType,
+		OnRetry:       func(n uint, err error) {},
+		JSONUnmarshal: json.Unmarshal,
 	}
 	for _, c := range customize {
 		c(prop)
@@ -155,7 +152,12 @@ func New(customize ...func(properties *Properties)) *Client {
 	client := cleanhttp.DefaultPooledClient()
 	client.Timeout = prop.Timeout
 
-	return &Client{client: client, retryOptions: opts, retryLogicFunc: prop.RetryLogicFunc}
+	return &Client{
+		client:         client,
+		retryOptions:   opts,
+		retryLogicFunc: prop.RetryLogicFunc,
+		jsonUnmarshal:  prop.JSONUnmarshal,
+	}
 }
 
 // Get execute http method and return result into *http.Response
@@ -223,25 +225,9 @@ func (c *Client) Do2JSON(request *http.Request, receiver interface{}) error {
 	if receiver == nil {
 		return ErrReceiverNotSet
 	}
-	err = json.Unmarshal(bytes, receiver)
+	err = c.jsonUnmarshal(bytes, receiver)
 	if err != nil {
 		return errors.Wrap(err, "json.Unmarshal")
-	}
-	return nil
-}
-
-// Do2EasyJSON execute http method and save response into easyjson receiver struct
-func (c *Client) Do2EasyJSON(request *http.Request, receiver easyjson.Unmarshaler) error {
-	bytes, err := c.Do2Bytes(request)
-	if err != nil {
-		return err
-	}
-	if receiver == nil {
-		return ErrReceiverNotSet
-	}
-	err = easyjson.Unmarshal(bytes, receiver)
-	if err != nil {
-		return errors.Wrap(err, "easyjson.Unmarshal")
 	}
 	return nil
 }

@@ -307,9 +307,6 @@ func TestDo2JSONNoReceiver(t *testing.T) {
 
 			err = Do2JSON(request, nil)
 			require.Equal(t, err, tc.expectedError)
-
-			err = Do2EasyJSON(request, nil)
-			require.Equal(t, err, tc.expectedError)
 		})
 	}
 }

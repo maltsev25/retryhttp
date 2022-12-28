@@ -27,3 +27,24 @@ if err != nil {
 	
 fmt.Println("You ip", response.IP)
 ```
+
+Override retry policy
+===========
+User can override retry policy for client:
+```go
+prop := func(properties *Properties) {
+    properties.Attempts = 10
+    properties.Timeout = time.Second
+}
+client := New(prop)
+```
+
+Override JSON Unmarshal
+===========
+User can register choice of JSON library into `retryhttp` or write own. By default `retryhttp` registers standard `encoding/json` respectively.
+```go
+prop := func(properties *Properties) {
+    properties.JSONUnmarshal = json.Unmarshal
+}
+client := New(prop)
+```
