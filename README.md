@@ -14,7 +14,7 @@ if err != nil {
 }
 ```
 
-Also was added additional methods Do2Bytes, Do2JSON and Do2EasyJSON. Example:
+Also was added additional methods Do2Bytes and Do2JSON. Example:
 ```go
 var response struct{
 	IP string
