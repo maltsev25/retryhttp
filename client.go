@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/avast/retry-go"
+	"github.com/avast/retry-go/v3"
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/pkg/errors"
 )
@@ -119,7 +119,7 @@ func Do2JSON(request *http.Request, receiver interface{}) error {
 func New(customize ...func(properties *Properties)) *Client {
 	prop := &Properties{
 		Config:        defaultConfig,
-		DelayType:     retry.DefaultDelayType,
+		DelayType:     retry.CombineDelay(retry.BackOffDelay, retry.RandomDelay),
 		OnRetry:       func(n uint, err error) {},
 		JSONUnmarshal: json.Unmarshal,
 	}
