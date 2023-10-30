@@ -1,9 +1,9 @@
 package retryhttp
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -15,6 +15,12 @@ import (
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/pkg/errors"
 )
+
+// LenReader is an interface implemented by many in-memory io.Reader's. Used
+// for automatically sending the right Content-Length header when possible.
+type LenReader interface {
+	Len() int
+}
 
 type Config struct {
 	// Attempts must be greater than 0, otherwise it will be set to 1
@@ -209,9 +215,9 @@ func (c *Client) Do2Bytes(request *http.Request) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	result, err := ioutil.ReadAll(response.Body)
+	result, err := io.ReadAll(response.Body)
 	if err != nil {
-		return nil, errors.Wrap(err, "ioutil.ReadAll")
+		return nil, errors.Wrap(err, "io.ReadAll")
 	}
 	return result, nil
 }
@@ -233,9 +239,25 @@ func (c *Client) Do2JSON(request *http.Request, receiver interface{}) error {
 }
 
 func (c *Client) doWithRetries(request *http.Request) (resp *http.Response, err error) {
+	var (
+		bodyReader    io.Reader
+		contentLength int64
+		read          bool
+	)
+
 	action := func() error {
+		r := request.Clone(request.Context())
+		if request.Body != nil {
+			if !read {
+				bodyReader, contentLength, err = getBodyReaderAndContentLength(request.Body)
+			}
+			read = true
+			r.Body = io.NopCloser(bodyReader)
+			r.ContentLength = contentLength
+		}
+
 		//nolint:bodyclose
-		resp, err = c.client.Do(request)
+		resp, err = c.client.Do(r)
 		if err != nil {
 			if isRetryableError(err) {
 				return err
@@ -265,9 +287,78 @@ func isRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
-	errNet, ok := err.(net.Error)
+
+	var errNet net.Error
+	ok := errors.As(err, &errNet)
 	if ok && errNet.Timeout() {
 		return true
 	}
 	return false
+}
+
+// nolint:cyclop
+func getBodyReaderAndContentLength(rawBody interface{}) (io.Reader, int64, error) {
+	var (
+		bodyReader    io.Reader
+		contentLength int64
+		err           error
+	)
+
+	switch body := rawBody.(type) {
+	// If a regular byte slice, we can read it over and over via new
+	// readers
+	case []byte:
+		buf := body
+		bodyReader = bytes.NewReader(buf)
+		contentLength = int64(len(buf))
+
+	// If a bytes.Buffer we can read the underlying byte slice over and
+	// over
+	case *bytes.Buffer:
+		buf := body
+		bodyReader = bytes.NewReader(buf.Bytes())
+		contentLength = int64(buf.Len())
+
+	// We prioritize *bytes.Reader here because we don't really want to
+	// deal with it seeking so want it to match here instead of the
+	// io.ReadSeeker case.
+	case *bytes.Reader:
+		buf, err := io.ReadAll(body)
+		if err != nil {
+			return nil, 0, err
+		}
+		bodyReader = bytes.NewReader(buf)
+		contentLength = int64(len(buf))
+
+	// Compat case
+	case io.ReadSeeker:
+		raw := body
+		_, err = raw.Seek(0, 0)
+		bodyReader = io.NopCloser(raw)
+		if lr, ok := raw.(LenReader); ok {
+			contentLength = int64(lr.Len())
+		}
+
+	// Read all in so we can reset
+	case io.Reader:
+		buf, err := io.ReadAll(body)
+		if err != nil {
+			return nil, 0, err
+		}
+		if len(buf) == 0 {
+			bodyReader = http.NoBody
+			contentLength = 0
+		} else {
+			bodyReader = bytes.NewReader(buf)
+			contentLength = int64(len(buf))
+		}
+
+	// No body provided, nothing to do
+	case nil:
+
+	// Unrecognized type
+	default:
+		return nil, 0, errors.Errorf("cannot handle type %T", rawBody)
+	}
+	return bodyReader, contentLength, err
 }

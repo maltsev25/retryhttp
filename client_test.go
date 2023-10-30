@@ -1,6 +1,7 @@
 package retryhttp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -320,7 +321,7 @@ func TestCustomClientDoRetryStatusCode(t *testing.T) {
 
 	prop := func(properties *Properties) {
 		properties.RetryHTTPCodes = []int{500, 400}
-		properties.Attempts = 3
+		properties.Attempts = 4
 	}
 	client := New(prop)
 
@@ -370,15 +371,18 @@ func TestCustomClientDoRetryLogicFunc(t *testing.T) {
 
 	testCases := []testCase{
 		{
-			name:               "success after retry method " + http.MethodGet,
+			name:               "success after retry method " + http.MethodPost,
 			url:                fmt.Sprintf("%s/different_response", server.URL),
-			method:             http.MethodGet,
+			method:             http.MethodPost,
 			expectedStatusCode: http.StatusBadRequest,
 		},
 	}
+	test := testData{A: 1, B: 2.0}
+	b, _ := json.Marshal(test)
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			request, err := http.NewRequestWithContext(ctx, tc.method, tc.url, nil)
+			request, err := http.NewRequestWithContext(ctx, tc.method, tc.url, bytes.NewBuffer(b))
 			require.NoError(t, err)
 
 			res, err := client.Do(request)
@@ -561,13 +565,21 @@ func getServer() *httptest.Server {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("/different_response", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.Header.Get("Content-Length") != "0" {
+			len, _ := strconv.Atoi(r.Header.Get("Content-Length"))
+			buf := make([]byte, len)
+			read, _ := r.Body.Read(buf)
+			if read != len {
+				panic("read != len")
+			}
+		}
 		var httpStatus int
 		switch switcher {
-		case 0:
+		case 0, 1:
 			httpStatus = http.StatusInternalServerError
-		case 1:
-			httpStatus = http.StatusBadRequest
 		case 2:
+			httpStatus = http.StatusBadRequest
+		case 3:
 			httpStatus = http.StatusOK
 		}
 		switcher++
