@@ -277,10 +277,7 @@ func (c *Client) doWithRetries(request *http.Request) (resp *http.Response, err 
 	opts = append(opts, c.retryOptions...)
 
 	err = retry.Do(action, opts...)
-	if err != nil {
-		return
-	}
-	return resp, nil
+	return resp, err
 }
 
 func isRetryableError(err error) bool {
