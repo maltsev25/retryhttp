@@ -11,8 +11,6 @@ linters:
     - asciicheck
     - bodyclose
     - cyclop
-    - deadcode
-    - depguard
     - dogsled
     - durationcheck
     - errcheck
@@ -45,11 +43,10 @@ linters:
     - revive
     - rowserrcheck
     - sqlclosecheck
-    - structcheck
     - stylecheck
     - unconvert
     - unparam
-    - varcheck
+    - unused
     - wastedassign
     - whitespace
 

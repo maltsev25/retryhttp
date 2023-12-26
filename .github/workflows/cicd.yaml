@@ -1,0 +1,32 @@
+name: ci/cd
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+      - LICENCE
+    branches:
+      - master
+  pull_request:
+env:
+  DEFAULT_GO_VERSION: '1.20'
+  LINTER_VERSION: 'v1.54.2'
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Install Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.DEFAULT_GO_VERSION }}
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+      - name: Cache Linter
+        uses: actions/cache@v3
+        with:
+          path: './build/golangci-lint'
+          key: ${{ runner.os }}-linter-${{ env.LINTER_VERSION }}
+      - name: Run linter
+        run: make lint
+      - name: Run test
+        run: make test
