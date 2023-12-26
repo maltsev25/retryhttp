@@ -16,7 +16,7 @@ build:
 lint:
 	@echo "---> Linting"
 ifndef LINTER
-	@curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./build v1.46.0
+	@curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./build v1.54.2
 endif
 	@./build/golangci-lint run
 
