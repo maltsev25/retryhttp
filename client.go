@@ -242,7 +242,6 @@ func (c *Client) doWithRetries(request *http.Request) (resp *http.Response, err 
 	var (
 		bodyBuffer    []byte
 		contentLength int64
-		read          bool
 	)
 
 	if request.Body != nil {
@@ -255,18 +254,16 @@ func (c *Client) doWithRetries(request *http.Request) (resp *http.Response, err 
 	}
 
 	action := func() error {
-		r := request.Clone(request.Context())
-		if !read && bodyBuffer != nil {
-			r.Body = io.NopCloser(bytes.NewReader(bodyBuffer))
-			r.ContentLength = contentLength
-			r.GetBody = func() (io.ReadCloser, error) {
+		if bodyBuffer != nil {
+			request.Body = io.NopCloser(bytes.NewReader(bodyBuffer))
+			request.ContentLength = contentLength
+			request.GetBody = func() (io.ReadCloser, error) {
 				return io.NopCloser(bytes.NewReader(bodyBuffer)), nil
 			}
-			read = true
 		}
 
 		//nolint:bodyclose
-		resp, err = c.client.Do(r)
+		resp, err = c.client.Do(request)
 		if err != nil {
 			if isRetryableError(err) {
 				return err
