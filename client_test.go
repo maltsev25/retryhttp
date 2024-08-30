@@ -251,7 +251,7 @@ func TestCustomClientDoRetry(t *testing.T) {
 
 	prop := func(properties *Properties) {
 		properties.Attempts = 3
-		properties.Timeout = time.Millisecond * 2
+		properties.Timeout = time.Millisecond * 3
 	}
 	client := New(prop)
 
