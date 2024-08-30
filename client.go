@@ -224,14 +224,14 @@ func (c *Client) Do2Bytes(request *http.Request) ([]byte, error) {
 
 // Do2JSON execute http method and save json response into receiver struct
 func (c *Client) Do2JSON(request *http.Request, receiver interface{}) error {
-	bytes, err := c.Do2Bytes(request)
+	b, err := c.Do2Bytes(request)
 	if err != nil {
 		return err
 	}
 	if receiver == nil {
 		return ErrReceiverNotSet
 	}
-	err = c.jsonUnmarshal(bytes, receiver)
+	err = c.jsonUnmarshal(b, receiver)
 	if err != nil {
 		return errors.Wrap(err, "json.Unmarshal")
 	}
@@ -240,20 +240,29 @@ func (c *Client) Do2JSON(request *http.Request, receiver interface{}) error {
 
 func (c *Client) doWithRetries(request *http.Request) (resp *http.Response, err error) {
 	var (
-		bodyReader    io.Reader
+		bodyBuffer    []byte
 		contentLength int64
 		read          bool
 	)
 
+	if request.Body != nil {
+		bodyBuffer, err = io.ReadAll(request.Body)
+		if err != nil {
+			return nil, err
+		}
+		contentLength = int64(len(bodyBuffer))
+		request.Body = io.NopCloser(bytes.NewReader(bodyBuffer))
+	}
+
 	action := func() error {
 		r := request.Clone(request.Context())
-		if request.Body != nil {
-			if !read {
-				bodyReader, contentLength, err = getBodyReaderAndContentLength(request.Body)
+		if !read && bodyBuffer != nil {
+			r.Body = io.NopCloser(bytes.NewReader(bodyBuffer))
+			r.ContentLength = contentLength
+			r.GetBody = func() (io.ReadCloser, error) {
+				return io.NopCloser(bytes.NewReader(bodyBuffer)), nil
 			}
 			read = true
-			r.Body = io.NopCloser(bodyReader)
-			r.ContentLength = contentLength
 		}
 
 		//nolint:bodyclose
@@ -291,71 +300,4 @@ func isRetryableError(err error) bool {
 		return true
 	}
 	return false
-}
-
-// nolint:cyclop
-func getBodyReaderAndContentLength(rawBody interface{}) (io.Reader, int64, error) {
-	var (
-		bodyReader    io.Reader
-		contentLength int64
-		err           error
-	)
-
-	switch body := rawBody.(type) {
-	// If a regular byte slice, we can read it over and over via new
-	// readers
-	case []byte:
-		buf := body
-		bodyReader = bytes.NewReader(buf)
-		contentLength = int64(len(buf))
-
-	// If a bytes.Buffer we can read the underlying byte slice over and
-	// over
-	case *bytes.Buffer:
-		buf := body
-		bodyReader = bytes.NewReader(buf.Bytes())
-		contentLength = int64(buf.Len())
-
-	// We prioritize *bytes.Reader here because we don't really want to
-	// deal with it seeking so want it to match here instead of the
-	// io.ReadSeeker case.
-	case *bytes.Reader:
-		buf, err := io.ReadAll(body)
-		if err != nil {
-			return nil, 0, err
-		}
-		bodyReader = bytes.NewReader(buf)
-		contentLength = int64(len(buf))
-
-	// Compat case
-	case io.ReadSeeker:
-		raw := body
-		_, err = raw.Seek(0, 0)
-		bodyReader = io.NopCloser(raw)
-		if lr, ok := raw.(LenReader); ok {
-			contentLength = int64(lr.Len())
-		}
-
-	// Read all in so we can reset
-	case io.Reader:
-		buf, err := io.ReadAll(body)
-		if err != nil {
-			return nil, 0, err
-		}
-		if len(buf) == 0 {
-			bodyReader = http.NoBody
-			contentLength = 0
-		} else {
-			bodyReader = bytes.NewReader(buf)
-			contentLength = int64(len(buf))
-		}
-
-	// No body provided, nothing to do
-	case nil:
-
-	// Unrecognized type
-	default:
-		return nil, 0, errors.Errorf("cannot handle type %T", rawBody)
-	}
-	return bodyReader, contentLength, err
 }
